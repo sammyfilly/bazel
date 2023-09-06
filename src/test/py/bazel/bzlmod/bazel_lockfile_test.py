@@ -1006,6 +1006,24 @@ class BazelLockfileTest(test_base.TestBase):
 
     self.assertEqual(old_data, new_data)
 
+  def testLockfileWithUpdatingWorkspacePath(self):
+    #Lockfile shouldn't get affected or error if we change the workspace path
+    self.ScratchFile('a/MODULE.bazel', [])
+    self.ScratchFile('a/WORKSPACE', [])
+    self.ScratchFile('a/BUILD', ['filegroup(name = "hello")'])
+    self.RunBazel(['build', '--nobuild', '//:all'], cwd='a')
+
+    # run same project from a new workspace
+    self.ScratchFile('MODULE.bazel', [])
+    self.ScratchFile('WORKSPACE', [])
+    self.ScratchFile('BUILD', ['filegroup(name = "hello")'])
+
+    with open('a/MODULE.bazel.lock', 'r') as lock_file:
+      lockfile_content = lock_file.read()
+    self.ScratchFile('MODULE.bazel.lock', [lockfile_content])
+
+    self.RunBazel(
+      ['build', '--nobuild', '--lockfile_mode=error', '//:all'])
 
 if __name__ == '__main__':
   unittest.main()
