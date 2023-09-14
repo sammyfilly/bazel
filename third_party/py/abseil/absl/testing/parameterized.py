@@ -254,7 +254,7 @@ def _non_string_or_bytes_iterable(obj):
 
 def _format_parameter_list(testcase_params):
   if isinstance(testcase_params, abc.Mapping):
-    return ', '.join('%s=%s' % (argname, _clean_repr(value))
+    return ', '.join(f'{argname}={_clean_repr(value)}'
                      for argname, value in testcase_params.items())
   elif _non_string_or_bytes_iterable(testcase_params):
     return ', '.join(map(_clean_repr, testcase_params))
@@ -330,7 +330,7 @@ class _ParameterizedTestIter(object):
         if isinstance(testcase_params, abc.Mapping):
           if _NAMED_DICT_KEY not in testcase_params:
             raise RuntimeError(
-                'Dict for named tests must contain key "%s"' % _NAMED_DICT_KEY)
+                f'Dict for named tests must contain key "{_NAMED_DICT_KEY}"')
           # Create a new dict to avoid modifying the supplied testcase_params.
           testcase_name = testcase_params[_NAMED_DICT_KEY]
           testcase_params = {
@@ -365,13 +365,12 @@ class _ParameterizedTestIter(object):
         # To keep test names descriptive, only the original method name is used.
         # To make sure test names are unique, we add a unique descriptive suffix
         # __x_params_repr__ for every test.
-        params_repr = '(%s)' % (_format_parameter_list(testcase_params),)
+        params_repr = f'({_format_parameter_list(testcase_params)})'
         bound_param_test.__x_params_repr__ = params_repr
       else:
-        raise RuntimeError('%s is not a valid naming type.' % (naming_type,))
+        raise RuntimeError(f'{naming_type} is not a valid naming type.')
 
-      bound_param_test.__doc__ = '%s(%s)' % (
-          bound_param_test.__name__, _format_parameter_list(testcase_params))
+      bound_param_test.__doc__ = f'{bound_param_test.__name__}({_format_parameter_list(testcase_params)})'
       if test_method.__doc__:
         bound_param_test.__doc__ += '\n%s' % (test_method.__doc__,)
       if inspect.iscoroutinefunction(test_method):
@@ -505,32 +504,28 @@ def product(*kwargs_seqs, **testgrid):
   """
 
   for name, values in testgrid.items():
-    assert isinstance(values, (list, tuple)), (
-        'Values of {} must be given as list or tuple, found {}'.format(
-            name, type(values)))
+    assert isinstance(
+        values, (list, tuple)
+    ), f'Values of {name} must be given as list or tuple, found {type(values)}'
 
   prior_arg_names = set()
   for kwargs_seq in kwargs_seqs:
-    assert ((isinstance(kwargs_seq, (list, tuple))) and
-            all(isinstance(kwargs, dict) for kwargs in kwargs_seq)), (
-                'Positional parameters must be a sequence of keyword arg'
-                'dicts, found {}'
-                .format(kwargs_seq))
+    assert (isinstance(kwargs_seq, (list, tuple))) and all(
+        isinstance(kwargs, dict) for kwargs in kwargs_seq
+    ), f'Positional parameters must be a sequence of keyword argdicts, found {kwargs_seq}'
     if kwargs_seq:
       arg_names = set(kwargs_seq[0])
-      assert all(set(kwargs) == arg_names for kwargs in kwargs_seq), (
-          'Keyword argument dicts within a single parameter must all have the '
-          'same keys, found {}'.format(kwargs_seq))
-      assert not (arg_names & prior_arg_names), (
-          'Keyword argument dict sequences must all have distinct argument '
-          'names, found duplicate(s) {}'
-          .format(sorted(arg_names & prior_arg_names)))
+      assert all(
+          set(kwargs) == arg_names for kwargs in kwargs_seq
+      ), f'Keyword argument dicts within a single parameter must all have the same keys, found {kwargs_seq}'
+      assert not (
+          arg_names & prior_arg_names
+      ), f'Keyword argument dict sequences must all have distinct argument names, found duplicate(s) {sorted(arg_names & prior_arg_names)}'
       prior_arg_names |= arg_names
 
-  assert not (prior_arg_names & set(testgrid)), (
-      'Arguments supplied in kwargs dicts in positional parameters must not '
-      'overlap with arguments supplied as named parameters; found duplicate '
-      'argument(s) {}'.format(sorted(prior_arg_names & set(testgrid))))
+  assert not (
+      prior_arg_names & set(testgrid)
+  ), f'Arguments supplied in kwargs dicts in positional parameters must not overlap with arguments supplied as named parameters; found duplicate argument(s) {sorted(prior_arg_names & set(testgrid))}'
 
   # Convert testgrid into a sequence of sequences of kwargs dicts and combine
   # with the positional parameters.
@@ -620,9 +615,8 @@ def _update_class_dict_for_param_test_case(
     if not (getattr(func, '__x_use_name__', None) or
             getattr(func, '__x_params_repr__', None)):
       raise RuntimeError(
-          '{}.{} generated a test function without using the parameterized '
-          'decorators. Only tests generated using the decorators are '
-          'supported.'.format(test_class_name, name))
+          f'{test_class_name}.{name} generated a test function without using the parameterized decorators. Only tests generated using the decorators are supported.'
+      )
 
     if getattr(func, '__x_use_name__', False):
       original_name = func.__name__
@@ -648,10 +642,8 @@ class TestCase(absltest.TestCase, metaclass=TestGeneratorMetaclass):
   def __str__(self):
     params_repr = self._get_params_repr()
     if params_repr:
-      params_repr = ' ' + params_repr
-    return '{}{} ({})'.format(
-        self._testMethodName, params_repr,
-        unittest.util.strclass(self.__class__))
+      params_repr = f' {params_repr}'
+    return f'{self._testMethodName}{params_repr} ({unittest.util.strclass(self.__class__)})'
 
   def id(self):
     """Returns the descriptive ID of the test.
@@ -663,13 +655,12 @@ class TestCase(absltest.TestCase, metaclass=TestGeneratorMetaclass):
       The test id.
     """
     base = super(TestCase, self).id()
-    params_repr = self._get_params_repr()
-    if params_repr:
+    if params_repr := self._get_params_repr():
       # We include the params in the id so that, when reported in the
       # test.xml file, the value is more informative than just "test_foo0".
       # Use a space to separate them so that it's copy/paste friendly and
       # easy to identify the actual test id.
-      return '{} {}'.format(base, params_repr)
+      return f'{base} {params_repr}'
     else:
       return base
 

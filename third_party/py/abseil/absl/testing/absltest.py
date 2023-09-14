@@ -116,10 +116,7 @@ def expectedFailureIf(condition, reason):  # pylint: disable=invalid-name
     Decorator function
   """
   del reason  # Unused
-  if condition:
-    return unittest.expectedFailure
-  else:
-    return lambda f: f
+  return unittest.expectedFailure if condition else (lambda f: f)
 
 
 class TempFileCleanup(enum.Enum):
@@ -143,10 +140,8 @@ def _get_default_test_random_seed():
   # type: () -> int
   random_seed = 301
   value = os.environ.get('TEST_RANDOM_SEED', '')
-  try:
+  with contextlib.suppress(ValueError):
     random_seed = int(value)
-  except ValueError:
-    pass
   return random_seed
 
 
@@ -206,14 +201,11 @@ def _get_default_randomize_ordering_seed():
     return random.Random().randint(1, 4294967295)
   if randomize == '0':
     return 0
-  try:
+  with contextlib.suppress(ValueError):
     seed = int(randomize)
     if seed > 0:
       return seed
-  except ValueError:
-    pass
-  raise ValueError(
-      'Unknown test randomization seed value: {}'.format(randomize))
+  raise ValueError(f'Unknown test randomization seed value: {randomize}')
 
 
 TEST_SRCDIR = flags.DEFINE_string(
@@ -503,8 +495,7 @@ class _TempFile(object):
                        'file in text mode'.format(mode))
     if 't' not in mode:
       mode += 't'
-    cm = self._open(mode, encoding, errors)
-    return cm
+    return self._open(mode, encoding, errors)
 
   def open_bytes(self, mode='rb'):
     # type: (Text) -> ContextManager[BinaryIO]
@@ -525,8 +516,7 @@ class _TempFile(object):
                        'file in binary mode'.format(mode))
     if 'b' not in mode:
       mode += 'b'
-    cm = self._open(mode, encoding=None, errors=None)
-    return cm
+    return self._open(mode, encoding=None, errors=None)
 
   # TODO(b/123775699): Once pytype supports typing.Literal, use overload and
   # Literal to express more precise return types. The contained type is
@@ -776,9 +766,7 @@ class TestCase(unittest.TestCase):
 
   def _get_tempfile_cleanup(self, override):
     # type: (Optional[TempFileCleanup]) -> TempFileCleanup
-    if override is not None:
-      return override
-    return self.tempfile_cleanup
+    return override if override is not None else self.tempfile_cleanup
 
   def _maybe_add_temp_path_cleanup(self, path, cleanup):
     # type: (Text, Optional[TempFileCleanup]) -> None
@@ -790,7 +778,7 @@ class TestCase(unittest.TestCase):
     elif cleanup == TempFileCleanup.SUCCESS:
       self._internal_add_cleanup_on_success(_rmtree_ignore_errors, path)
     else:
-      raise AssertionError('Unexpected cleanup value: {}'.format(cleanup))
+      raise AssertionError(f'Unexpected cleanup value: {cleanup}')
 
   def _internal_add_cleanup_on_success(
       self,
@@ -946,8 +934,7 @@ class TestCase(unittest.TestCase):
     try:
       self.assertSequenceEqual(prefix, whole[:prefix_len], msg)
     except AssertionError:
-      self.fail('prefix: %s not found at start of whole: %s.' %
-                (prefix, whole), msg)
+      self.fail(f'prefix: {prefix} not found at start of whole: {whole}.', msg)
 
   def assertEmpty(self, container, msg=None):
     """Asserts that an object has zero length.
@@ -994,8 +981,10 @@ class TestCase(unittest.TestCase):
                 '{!r}'.format(type(container).__name__), msg)
     if len(container) != expected_len:
       container_repr = unittest.util.safe_repr(container)  # pytype: disable=module-attr
-      self.fail('{} has length of {}, expected {}.'.format(
-          container_repr, len(container), expected_len), msg)
+      self.fail(
+          f'{container_repr} has length of {len(container)}, expected {expected_len}.',
+          msg,
+      )
 
   def assertSequenceAlmostEqual(self, expected_seq, actual_seq, places=None,
                                 msg=None, delta=None):
@@ -1020,8 +1009,10 @@ class TestCase(unittest.TestCase):
       delta: The OK difference between compared values.
     """
     if len(expected_seq) != len(actual_seq):
-      self.fail('Sequence size mismatch: {} vs {}'.format(
-          len(expected_seq), len(actual_seq)), msg)
+      self.fail(
+          f'Sequence size mismatch: {len(expected_seq)} vs {len(actual_seq)}',
+          msg,
+      )
 
     err_list = []
     for idx, (exp_elem, act_elem) in enumerate(zip(expected_seq, actual_seq)):
@@ -1034,7 +1025,7 @@ class TestCase(unittest.TestCase):
                                delta=delta)
         # pytype: enable=wrong-keyword-args
       except self.failureException as err:
-        err_list.append('At index {}: {}'.format(idx, err))
+        err_list.append(f'At index {idx}: {err}')
 
     if err_list:
       if len(err_list) > 30:
@@ -1044,21 +1035,19 @@ class TestCase(unittest.TestCase):
 
   def assertContainsSubset(self, expected_subset, actual_set, msg=None):
     """Checks whether actual iterable is a superset of expected iterable."""
-    missing = set(expected_subset) - set(actual_set)
-    if not missing:
+    if missing := set(expected_subset) - set(actual_set):
+      self.fail('Missing elements %s\nExpected: %s\nActual: %s' % (
+          missing, expected_subset, actual_set), msg)
+    else:
       return
-
-    self.fail('Missing elements %s\nExpected: %s\nActual: %s' % (
-        missing, expected_subset, actual_set), msg)
 
   def assertNoCommonElements(self, expected_seq, actual_seq, msg=None):
     """Checks whether actual iterable and expected iterable are disjoint."""
-    common = set(expected_seq) & set(actual_seq)
-    if not common:
+    if common := set(expected_seq) & set(actual_seq):
+      self.fail('Common elements %s\nExpected: %s\nActual: %s' % (
+          common, expected_seq, actual_seq), msg)
+    else:
       return
-
-    self.fail('Common elements %s\nExpected: %s\nActual: %s' % (
-        common, expected_seq, actual_seq), msg)
 
   def assertItemsEqual(self, expected_seq, actual_seq, msg=None):
     """Deprecated, please use assertCountEqual instead.
@@ -1136,14 +1125,11 @@ class TestCase(unittest.TestCase):
                       str), ('Second argument is not a string: %r' % (second,))
     line_limit = kwargs.pop('line_limit', 0)
     if kwargs:
-      raise TypeError('Unexpected keyword args {}'.format(tuple(kwargs)))
+      raise TypeError(f'Unexpected keyword args {tuple(kwargs)}')
 
     if first == second:
       return
-    if msg:
-      failure_message = [msg + ':\n']
-    else:
-      failure_message = ['\n']
+    failure_message = [msg + ':\n'] if msg else ['\n']
     if line_limit:
       line_limit += len(failure_message)
     for line in difflib.ndiff(first.splitlines(True), second.splitlines(True)):
@@ -1154,8 +1140,7 @@ class TestCase(unittest.TestCase):
       n_omitted = len(failure_message) - line_limit
       failure_message = failure_message[:line_limit]
       failure_message.append(
-          '(... and {} more delta lines omitted for brevity.)\n'.format(
-              n_omitted))
+          f'(... and {n_omitted} more delta lines omitted for brevity.)\n')
 
     raise self.failureException(''.join(failure_message))
 
@@ -1219,7 +1204,7 @@ class TestCase(unittest.TestCase):
       regex_type = bytes
 
     if regex_type is str:
-      regex = u'(?:%s)' % u')|(?:'.join(regexes)
+      regex = f"(?:{')|(?:'.join(regexes)})"
     elif regex_type is bytes:
       regex = b'(?:' + (b')|(?:'.join(regexes)) + b')'
     else:
@@ -1227,8 +1212,10 @@ class TestCase(unittest.TestCase):
                 message)
 
     if not re.search(regex, actual_str, re.MULTILINE):
-      self.fail('"%s" does not contain any of these regexes: %s.' %
-                (actual_str, regexes), message)
+      self.fail(
+          f'"{actual_str}" does not contain any of these regexes: {regexes}.',
+          message,
+      )
 
   def assertCommandSucceeds(self, command, regexes=(b'',), env=None,
                             close_fds=True, msg=None):
@@ -1331,8 +1318,7 @@ class TestCase(unittest.TestCase):
 
     def __exit__(self, exc_type, exc_value, tb):
       if exc_type is None:
-        self.test_case.fail(self.expected_exception.__name__ + ' not raised',
-                            self.msg)
+        self.test_case.fail(f'{self.expected_exception.__name__} not raised', self.msg)
       if not issubclass(exc_type, self.expected_exception):
         return False
       self.test_func(exc_value)
@@ -1458,11 +1444,9 @@ class TestCase(unittest.TestCase):
     for string in strings:
       index = target.find(str(string), current_index)
       if index == -1 and current_index == 0:
-        self.fail("Did not find '%s' in '%s'" %
-                  (string, target), msg)
+        self.fail(f"Did not find '{string}' in '{target}'", msg)
       elif index == -1:
-        self.fail("Did not find '%s' after '%s' in '%s'" %
-                  (string, last_string, target), msg)
+        self.fail(f"Did not find '{string}' after '{last_string}' in '{target}'", msg)
       last_string = string
       current_index = index
 
@@ -1490,8 +1474,10 @@ class TestCase(unittest.TestCase):
         pass
 
     if first_nonmatching is not None:
-      self.fail('%s not a subsequence of %s. First non-matching element: %s' %
-                (subsequence, container, first_nonmatching), msg)
+      self.fail(
+          f'{subsequence} not a subsequence of {container}. First non-matching element: {first_nonmatching}',
+          msg,
+      )
 
   def assertContainsExactSubsequence(self, container, subsequence, msg=None):
     """Asserts that "container" contains "subsequence" as an exact subsequence.
@@ -1505,10 +1491,10 @@ class TestCase(unittest.TestCase):
       subsequence: the list we hope will be an exact subsequence of container.
       msg: Optional message to report on failure.
     """
-    container = list(container)
     subsequence = list(subsequence)
     longest_match = 0
 
+    container = list(container)
     for start in range(1 + len(container) - len(subsequence)):
       if longest_match == len(subsequence):
         break
@@ -1519,9 +1505,10 @@ class TestCase(unittest.TestCase):
       longest_match = max(longest_match, index)
 
     if longest_match < len(subsequence):
-      self.fail('%s not an exact subsequence of %s. '
-                'Longest matching prefix: %s' %
-                (subsequence, container, subsequence[:longest_match]), msg)
+      self.fail(
+          f'{subsequence} not an exact subsequence of {container}. Longest matching prefix: {subsequence[:longest_match]}',
+          msg,
+      )
 
   def assertTotallyOrdered(self, *groups, **kwargs):
     """Asserts that total ordering has been implemented correctly.
@@ -1689,7 +1676,7 @@ class TestCase(unittest.TestCase):
       entries = sorted((safe_repr(k), safe_repr(v)) for k, v in dikt.items())
       return '{%s}' % (', '.join('%s: %s' % pair for pair in entries))
 
-    message = ['%s != %s%s' % (Repr(a), Repr(b), ' (%s)' % msg if msg else '')]
+    message = [f"{Repr(a)} != {Repr(b)}{f' ({msg})' if msg else ''}"]
 
     # The standard library default output confounds lexical difference with
     # value difference; treat them separately.
@@ -1768,7 +1755,7 @@ class TestCase(unittest.TestCase):
     if self.maxDiff is not None:
       max_problems_to_show = self.maxDiff // 80
       if len(problems) > max_problems_to_show:
-        problems = problems[0:max_problems_to_show-1] + ['...']
+        problems = problems[:max_problems_to_show-1] + ['...']
 
     if problems:
       self.fail('; '.join(problems), msg)
@@ -1787,16 +1774,16 @@ class TestCase(unittest.TestCase):
     try:
       first_structured = json.loads(first)
     except ValueError as e:
-      raise ValueError(self._formatMessage(
-          msg,
-          'could not decode first JSON value %s: %s' % (first, e)))
+      raise ValueError(
+          self._formatMessage(msg,
+                              f'could not decode first JSON value {first}: {e}'))
 
     try:
       second_structured = json.loads(second)
     except ValueError as e:
-      raise ValueError(self._formatMessage(
-          msg,
-          'could not decode second JSON value %s: %s' % (second, e)))
+      raise ValueError(
+          self._formatMessage(
+              msg, f'could not decode second JSON value {second}: {e}'))
 
     self.assertSameStructure(first_structured, second_structured,
                              aname='first', bname='second', msg=msg)
@@ -1914,8 +1901,6 @@ def _walk_structure_for_problems(a, b, aname, bname, problem_list):
       if k not in a:
         problem_list.append('%s lacks %r but %s has it' % (aname, k, bname))
 
-  # NOTE: a or b could be a defaultdict, so we must take care that the traversal
-  # doesn't modify the data.
   elif isinstance(a, abc.Mapping):
     for k in a:
       if k in b:
@@ -1932,7 +1917,6 @@ def _walk_structure_for_problems(a, b, aname, bname, problem_list):
             '%s lacks [%r] but %s has it with value %r' %
             (aname, k, bname, b[k]))
 
-  # Strings/bytes are Sequences but we'll just do those with regular !=
   elif (isinstance(a, abc.Sequence) and
         not isinstance(a, _TEXT_OR_BINARY_TYPES)):
     minlen = min(len(a), len(b))
@@ -1947,9 +1931,8 @@ def _walk_structure_for_problems(a, b, aname, bname, problem_list):
       problem_list.append('%s lacks [%i] but %s has it with value %r' %
                           (aname, i, bname, b[i]))
 
-  else:
-    if a != b:
-      problem_list.append('%s is %r but %s is %r' % (aname, a, bname, b))
+  elif a != b:
+    problem_list.append('%s is %r but %s is %r' % (aname, a, bname, b))
 
 
 def get_command_string(command):
@@ -1962,16 +1945,11 @@ def get_command_string(command):
   """
   if isinstance(command, str):
     return command
-  else:
-    if os.name == 'nt':
-      return ' '.join(command)
-    else:
-      # The following is identical to Python 3's shlex.quote function.
-      command_string = ''
-      for word in command:
-        # Single quote word, and replace each ' in word with '"'"'
-        command_string += "'" + word.replace("'", "'\"'\"'") + "' "
-      return command_string[:-1]
+  if os.name == 'nt':
+    return ' '.join(command)
+  command_string = ''.join("'" + word.replace("'", "'\"'\"'") + "' "
+                           for word in command)
+  return command_string[:-1]
 
 
 def get_command_stderr(command, env=None, close_fds=True):
@@ -2268,8 +2246,7 @@ class TestLoader(unittest.TestLoader):
 
   def __init__(self, *args, **kwds):
     super(TestLoader, self).__init__(*args, **kwds)
-    seed = _get_default_randomize_ordering_seed()
-    if seed:
+    if seed := _get_default_randomize_ordering_seed():
       self._randomize_ordering_seed = seed
       self._random = random.Random(self._randomize_ordering_seed)
     else:
@@ -2301,7 +2278,8 @@ def get_default_xml_output_filename():
   elif os.environ.get('TEST_XMLOUTPUTDIR'):
     return os.path.join(
         os.environ['TEST_XMLOUTPUTDIR'],
-        os.path.splitext(os.path.basename(sys.argv[0]))[0] + '.xml')
+        f'{os.path.splitext(os.path.basename(sys.argv[0]))[0]}.xml',
+    )
 
 
 def _setup_filtering(argv):
@@ -2327,7 +2305,7 @@ def _setup_filtering(argv):
 
   filters = shlex.split(test_filter)
   if sys.version_info[:2] >= (3, 7):
-    filters = ['-k=' + test_filter for test_filter in filters]
+    filters = [f'-k={test_filter}' for test_filter in filters]
 
   argv[1:1] = filters
 
@@ -2388,8 +2366,9 @@ def _setup_sharding(custom_loader=None):
       with open(os.environ['TEST_SHARD_STATUS_FILE'], 'w') as f:
         f.write('')
     except IOError:
-      sys.stderr.write('Error opening TEST_SHARD_STATUS_FILE (%s). Exiting.'
-                       % os.environ['TEST_SHARD_STATUS_FILE'])
+      sys.stderr.write(
+          f"Error opening TEST_SHARD_STATUS_FILE ({os.environ['TEST_SHARD_STATUS_FILE']}). Exiting."
+      )
       sys.exit(1)
 
   base_loader = custom_loader or TestLoader()
@@ -2563,10 +2542,8 @@ def run_tests(argv, args, kwargs):  # pylint: disable=line-too-long
 def _rmtree_ignore_errors(path):
   # type: (Text) -> None
   if os.path.isfile(path):
-    try:
+    with contextlib.suppress(OSError):
       os.unlink(path)
-    except OSError:
-      pass
   else:
     shutil.rmtree(path, ignore_errors=True)
 

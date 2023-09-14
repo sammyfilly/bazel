@@ -255,8 +255,7 @@ class _LoggerLevelsSerializer(object):
   def serialize(self, value):
     if isinstance(value, str):
       return value
-    return ','.join(
-        '{}:{}'.format(name, level) for name, level in value.items())
+    return ','.join(f'{name}:{level}' for name, level in value.items())
 
 
 class _StderrthresholdFlag(flags.Flag):
@@ -373,10 +372,8 @@ def set_stderrthreshold(s):
     FLAGS.stderrthreshold = s
   else:
     raise ValueError(
-        'set_stderrthreshold only accepts integer absl logging level '
-        'from -3 to 1, or case-insensitive string values '
-        "'debug', 'info', 'warning', 'error', and 'fatal'. "
-        'But found "{}" ({}).'.format(s, type(s)))
+        f"""set_stderrthreshold only accepts integer absl logging level from -3 to 1, or case-insensitive string values 'debug', 'info', 'warning', 'error', and 'fatal'. But found "{s}" ({type(s)})."""
+    )
 
 
 def fatal(msg, *args, **kwargs):
@@ -541,8 +538,7 @@ def log(level, msg, *args, **kwargs):
     # Treat this as vlog, 1 is equivalent to DEBUG.
     standard_level = converter.STANDARD_DEBUG - (level - 1)
   else:
-    if level < converter.ABSL_FATAL:
-      level = converter.ABSL_FATAL
+    level = max(level, converter.ABSL_FATAL)
     standard_level = converter.absl_to_standard(level)
 
   # Match standard logging's behavior. Before use_absl_handler() and
@@ -587,8 +583,7 @@ def vlog_is_on(level):
     # Treat this as vlog, 1 is equivalent to DEBUG.
     standard_level = converter.STANDARD_DEBUG - (level - 1)
   else:
-    if level < converter.ABSL_FATAL:
-      level = converter.ABSL_FATAL
+    level = max(level, converter.ABSL_FATAL)
     standard_level = converter.absl_to_standard(level)
   return _absl_logger.isEnabledFor(standard_level)
 
@@ -635,7 +630,7 @@ def get_log_file_name(level=INFO):
     ValueError: Raised when `level` has an invalid value.
   """
   if level not in converter.ABSL_LEVELS:
-    raise ValueError('Invalid absl.logging level {}'.format(level))
+    raise ValueError(f'Invalid absl.logging level {level}')
   stream = get_absl_handler().python_handler.stream
   if (stream == sys.stderr or stream == sys.stdout or
       not hasattr(stream, 'name')):
@@ -674,7 +669,7 @@ def find_log_dir_and_names(program_name=None, log_dir=None):
 
     # Prepend py_ to files so that python code gets a unique file, and
     # so that C++ libraries do not try to write to the same log files as us.
-    program_name = 'py_%s' % program_name
+    program_name = f'py_{program_name}'
 
   actual_log_dir = find_log_dir(log_dir=log_dir)
 
@@ -682,13 +677,9 @@ def find_log_dir_and_names(program_name=None, log_dir=None):
     username = getpass.getuser()
   except KeyError:
     # This can happen, e.g. when running under docker w/o passwd file.
-    if hasattr(os, 'getuid'):
-      # Windows doesn't have os.getuid
-      username = str(os.getuid())
-    else:
-      username = 'unknown'
+    username = str(os.getuid()) if hasattr(os, 'getuid') else 'unknown'
   hostname = socket.gethostname()
-  file_prefix = '%s.%s.%s.log' % (program_name, hostname, username)
+  file_prefix = f'{program_name}.{hostname}.{username}.log'
 
   return actual_log_dir, file_prefix, program_name
 
@@ -722,7 +713,7 @@ def find_log_dir(log_dir=None):
     if os.path.isdir(d) and os.access(d, os.W_OK):
       return d
   raise FileNotFoundError(
-      "Can't find a writable directory for logs, tried %s" % dirs)
+      f"Can't find a writable directory for logs, tried {dirs}")
 
 
 def get_absl_log_prefix(record):
@@ -835,7 +826,7 @@ class PythonHandler(logging.StreamHandler):
     # os.symlink is not available on Windows Python 2.
     if getattr(os, 'symlink', None):
       # Create a symlink to the log file with a canonical name.
-      symlink = os.path.join(actual_log_dir, symlink_prefix + '.INFO')
+      symlink = os.path.join(actual_log_dir, f'{symlink_prefix}.INFO')
       try:
         if os.path.islink(symlink):
           os.unlink(symlink)
@@ -971,10 +962,10 @@ class ABSLHandler(logging.Handler):
     self._current_handler.close()
 
   def handle(self, record):
-    rv = self.filter(record)
-    if rv:
+    if rv := self.filter(record):
       return self._current_handler.handle(record)
-    return rv
+    else:
+      return rv
 
   @property
   def python_handler(self):

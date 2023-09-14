@@ -94,14 +94,10 @@ class Handler(BaseHTTPRequestHandler):
       self.serve_file()
     else:
       self.do_AUTHHEAD()
-      self.wfile.write(
-          'Bad authorization header: {}'.format(auth_header).encode('ascii')
-      )
+      self.wfile.write(f'Bad authorization header: {auth_header}'.encode('ascii'))
 
   def serve_file(self):
-    path_to_serve = self.path[1:]
-    if self.filename is not None:
-      path_to_serve = self.filename
+    path_to_serve = self.filename if self.filename is not None else self.path[1:]
     to_serve = os.path.join(os.getcwd(), path_to_serve)
     with open(to_serve, 'rb') as file_to_serve:
       self.wfile.write(file_to_serve.read())

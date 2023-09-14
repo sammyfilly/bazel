@@ -14,6 +14,7 @@
 
 """A Python test reporter that generates test reports in JUnit XML format."""
 
+
 import datetime
 import re
 import sys
@@ -39,10 +40,8 @@ _escape_xml_attr_conversions = {
     '\n': '&#xA;',
     '\t': '&#x9;',
     '\r': '&#xD;',
-    ' ': '&#x20;'}
-_escape_xml_attr_conversions.update(_control_character_conversions)
-
-
+    ' ': '&#x20;',
+} | _control_character_conversions
 # When class or module level function fails, unittest/suite.py adds a
 # _ErrorHolder instance instead of a real TestCase, and it has a description
 # like "setUpClass (__main__.MyTestCase)".
@@ -98,22 +97,18 @@ def _print_xml_element_header(element, attributes, stream, indentation=''):
     stream: output stream to write test report XML to
     indentation: indentation added to the element header
   """
-  stream.write('%s<%s' % (indentation, element))
+  stream.write(f'{indentation}<{element}')
   for attribute in attributes:
     if (len(attribute) == 2 and attribute[0] is not None and
         attribute[1] is not None):
-      stream.write(' %s="%s"' % (attribute[0], attribute[1]))
+      stream.write(f' {attribute[0]}="{attribute[1]}"')
   stream.write('>\n')
 
 # Copy time.time which ensures the real time is used internally.
 # This prevents bad interactions with tests that stub out time.
 _time_copy = time.time
 
-if hasattr(traceback, '_some_str'):
-  # Use the traceback module str function to format safely.
-  _safe_str = traceback._some_str
-else:
-  _safe_str = str  # pylint: disable=invalid-name
+_safe_str = traceback._some_str if hasattr(traceback, '_some_str') else str
 
 
 class _TestCaseResult(object):
@@ -148,9 +143,7 @@ class _TestCaseResult(object):
     # Worse, unittest uses _ErrorHandler instances to represent class / module
     # level failures.
     test_desc = test.id() or str(test)
-    # Check if it's something like "setUpClass (__main__.TestCase)".
-    match = _CLASS_OR_MODULE_LEVEL_TEST_DESC_REGEX.match(test_desc)
-    if match:
+    if match := _CLASS_OR_MODULE_LEVEL_TEST_DESC_REGEX.match(test_desc):
       name = match.group(1)
       full_class_name = match.group(2)
     else:
@@ -159,7 +152,7 @@ class _TestCaseResult(object):
         # If the test case is a _SubTest, the real TestCase instance is
         # available as _SubTest.test_case.
         class_name = unittest.util.strclass(test.test_case.__class__)
-      if test_desc.startswith(class_name + '.'):
+      if test_desc.startswith(f'{class_name}.'):
         # In a typical unittest.TestCase scenario, test.id() returns with
         # a class name formatted using unittest.util.strclass.
         name = test_desc[len(class_name)+1:]
@@ -199,9 +192,9 @@ class _TestCaseResult(object):
       result = 'suppressed'
 
     test_case_attributes = [
-        ('name', '%s' % self.name),
-        ('status', '%s' % status),
-        ('result', '%s' % result),
+        ('name', f'{self.name}'),
+        ('status', f'{status}'),
+        ('result', f'{result}'),
         ('time', '%.3f' % self.run_time),
         ('classname', self.full_class_name),
         ('timestamp', _iso8601_timestamp(self.start_time)),
@@ -281,7 +274,7 @@ class _TestSuiteResult(object):
       failures = self.failure_counts[suite_name]
       errors = self.error_counts[suite_name]
       suite_attributes = [
-          ('name', '%s' % suite_name),
+          ('name', f'{suite_name}'),
           ('tests', '%d' % len(suite)),
           ('failures', '%d' % failures),
           ('errors', '%d' % errors),
@@ -479,22 +472,24 @@ class _TextAndXMLTestResult(_pretty_print_reporter.TextTestResult):
   def addUnexpectedSuccess(self, test):
     super(_TextAndXMLTestResult, self).addUnexpectedSuccess(test)
     test_name = test.id() or str(test)
-    error_summary = ('error', '', '',
-                     'Test case %s should have failed, but passed.'
-                     % (test_name))
+    error_summary = (
+        'error',
+        '',
+        '',
+        f'Test case {test_name} should have failed, but passed.',
+    )
     self.add_pending_test_case_result(test, error_summary=error_summary)
 
   def addSubTest(self, test, subtest, err):  # pylint: disable=invalid-name
     super(_TextAndXMLTestResult, self).addSubTest(test, subtest, err)
-    if err is not None:
-      if issubclass(err[0], test.failureException):
-        error_summary = ('failure', err[0], err[1],
-                         self._exc_info_to_string(err, test=test))
-      else:
-        error_summary = ('error', err[0], err[1],
-                         self._exc_info_to_string(err, test=test))
-    else:
+    if err is None:
       error_summary = None
+    elif issubclass(err[0], test.failureException):
+      error_summary = ('failure', err[0], err[1],
+                       self._exc_info_to_string(err, test=test))
+    else:
+      error_summary = ('error', err[0], err[1],
+                       self._exc_info_to_string(err, test=test))
     self.add_pending_test_case_result(subtest, error_summary=error_summary)
 
   def printErrors(self):

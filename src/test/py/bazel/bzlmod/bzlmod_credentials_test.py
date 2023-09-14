@@ -98,7 +98,7 @@ class BzlmodCredentialsTest(test_base.TestBase):
     with StaticHTTPServer(self.registry_root) as static_server:
       _, stdout, _ = self.RunBazel([
           'run',
-          '--registry=' + static_server.getURL(),
+          f'--registry={static_server.getURL()}',
           '--registry=https://bcr.bazel.build',
           '//:main',
       ])
@@ -106,12 +106,12 @@ class BzlmodCredentialsTest(test_base.TestBase):
 
   def testMissingCredentials(self):
     with StaticHTTPServer(
-        self.registry_root, expected_auth='Bearer TOKEN'
-    ) as static_server:
+          self.registry_root, expected_auth='Bearer TOKEN'
+      ) as static_server:
       _, _, stderr = self.RunBazel(
           [
               'run',
-              '--registry=' + static_server.getURL(),
+              f'--registry={static_server.getURL()}',
               '--registry=https://bcr.bazel.build',
               '//:main',
           ],
@@ -121,12 +121,12 @@ class BzlmodCredentialsTest(test_base.TestBase):
 
   def testCredentialsFromHelper(self):
     with StaticHTTPServer(
-        self.registry_root, expected_auth='Bearer TOKEN'
-    ) as static_server:
+          self.registry_root, expected_auth='Bearer TOKEN'
+      ) as static_server:
       _, stdout, _ = self.RunBazel([
           'run',
           '--credential_helper=%workspace%/credhelper',
-          '--registry=' + static_server.getURL(),
+          f'--registry={static_server.getURL()}',
           '--registry=https://bcr.bazel.build',
           '//:main',
       ])
@@ -136,12 +136,12 @@ class BzlmodCredentialsTest(test_base.TestBase):
     expected_auth = 'Basic ' + base64.b64encode(b'foo:bar').decode('ascii')
 
     with StaticHTTPServer(
-        self.registry_root, expected_auth=expected_auth
-    ) as static_server:
+          self.registry_root, expected_auth=expected_auth
+      ) as static_server:
       _, stdout, _ = self.RunBazel(
           [
               'run',
-              '--registry=' + static_server.getURL(),
+              f'--registry={static_server.getURL()}',
               '--registry=https://bcr.bazel.build',
               '//:main',
           ],
@@ -151,13 +151,13 @@ class BzlmodCredentialsTest(test_base.TestBase):
 
   def testCredentialsFromHelperOverrideNetrc(self):
     with StaticHTTPServer(
-        self.registry_root, expected_auth='Bearer TOKEN'
-    ) as static_server:
+          self.registry_root, expected_auth='Bearer TOKEN'
+      ) as static_server:
       _, stdout, _ = self.RunBazel(
           [
               'run',
               '--credential_helper=%workspace%/credhelper',
-              '--registry=' + static_server.getURL(),
+              f'--registry={static_server.getURL()}',
               '--registry=https://bcr.bazel.build',
               '//:main',
           ],
