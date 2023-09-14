@@ -60,7 +60,7 @@ def CreateNativeLibsZip(aar, cpu, native_libs_zip):
   """
   native_lib_pattern = re.compile("^jni/.+/.+\\.so$")
   if any(native_lib_pattern.match(filename) for filename in aar.namelist()):
-    cpu_pattern = re.compile("^jni/" + cpu + "/.+\\.so$")
+    cpu_pattern = re.compile(f"^jni/{cpu}" + "/.+\\.so$")
     libs = [name for name in aar.namelist() if cpu_pattern.match(name)]
     if not libs:
       raise UnsupportedArchitectureError()
@@ -86,9 +86,9 @@ def Main(input_aar_path, output_zip_path, cpu, input_aar_path_for_error_msg):
       try:
         CreateNativeLibsZip(input_aar, cpu, native_libs_zip)
       except UnsupportedArchitectureError:
-        print("AAR " + input_aar_path_for_error_msg +
-              " missing native libs for requested architecture: " +
-              cpu)
+        print(
+            f"AAR {input_aar_path_for_error_msg} missing native libs for requested architecture: {cpu}"
+        )
         sys.exit(1)
 
 

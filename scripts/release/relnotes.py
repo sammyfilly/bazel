@@ -45,7 +45,7 @@ def extract_relnotes(commit_message_lines):
       in_relnote = True
       line = line[len(m[0]):]
       if m[1] == "INC":
-        line = "**[Incompatible]** " + line.strip()
+        line = f"**[Incompatible]** {line.strip()}"
     line = line.strip()
     if in_relnote and line:
       relnote_lines.append(line)
@@ -92,7 +92,7 @@ def get_label(issue_id):
       " - --plaintext-file -", shell=True
   ).decode("utf-8").strip().split("\n")[0]
   headers = {
-      "Authorization": "Bearer " + auth,
+      "Authorization": f"Bearer {auth}",
       "Accept": "application/vnd.github+json",
   }
   response = requests.get(
@@ -115,11 +115,7 @@ def get_categorized_relnotes(filtered_notes):
     if issue_id:
       category = get_label(re.sub(r"\(|\#|\)", "", issue_id.group(0).strip()))
 
-    if category is None:
-      category = "General"
-    else:
-      category = re.sub("team-", "", category)
-
+    category = "General" if category is None else re.sub("team-", "", category)
     try:
       categorized_relnotes[category].append(relnote)
     except KeyError:
@@ -133,21 +129,21 @@ def get_external_authors_between(base, head):
 
   # Get all authors
   authors = git("log", f"{base}..{head}", "--format=%aN|%aE")
-  authors = set(
+  authors = {
       author.partition("|")[0].rstrip()
-      for author in authors if not (author.endswith(("@google.com"))))
+      for author in authors if not (author.endswith(("@google.com")))
+  }
 
   # Get all co-authors
   contributors = git(
       "log", f"{base}..{head}", "--format=%(trailers:key=Co-authored-by)"
   )
 
-  coauthors = []
-  for coauthor in contributors:
-    if coauthor and not re.search("@google.com", coauthor):
-      coauthors.append(
-          " ".join(re.sub(r"Co-authored-by: |<.*?>", "", coauthor).split())
-      )
+  coauthors = [
+      " ".join(re.sub(r"Co-authored-by: |<.*?>", "", coauthor).split())
+      for coauthor in contributors
+      if coauthor and not re.search("@google.com", coauthor)
+  ]
   return ", ".join(sorted(authors.union(coauthors), key=str.casefold))
 
 
@@ -202,7 +198,7 @@ if __name__ == "__main__":
     print()
     categorized_release_notes = get_categorized_relnotes(filtered_relnotes)
     for label in categorized_release_notes:
-      print(label + ":")
+      print(f"{label}:")
       for note in categorized_release_notes[label]:
         print("+", note)
       print()

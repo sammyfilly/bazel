@@ -68,13 +68,15 @@ class ActionTempTest(test_base.TestBase):
           expected_tmpdir_regex=os.path.basename(tmp_dir),
           bazel_bin=bazel_bin,
           bazel_genfiles=bazel_genfiles,
-          env_add=dict((k, tmp_dir) for k in self._TempEnvvars()))
+          env_add={k: tmp_dir
+                   for k in self._TempEnvvars()},
+      )
 
-    _Impl(self.ScratchDir(strategy + '-temp-1'))
+    _Impl(self.ScratchDir(f'{strategy}-temp-1'))
     # Assert that the actions pick up the current client environment.
     # Check this by invalidating the actions (update input.txt) and running
     # Bazel with a different environment.
-    _Impl(self.ScratchDir(strategy + '-temp-2'))
+    _Impl(self.ScratchDir(f'{strategy}-temp-2'))
 
   def _AssertTempDir(self,
                      strategy,
@@ -101,10 +103,7 @@ class ActionTempTest(test_base.TestBase):
     self.ScratchFile('foo/input.txt', [content])
 
   def _TempEnvvars(self):
-    if test_base.TestBase.IsWindows():
-      return ['TMP', 'TEMP']
-    else:
-      return ['TMPDIR']
+    return ['TMP', 'TEMP'] if test_base.TestBase.IsWindows() else ['TMPDIR']
 
   def _BazelOutputDirectory(self, info_key):
     _, stdout, _ = self.RunBazel(['info', info_key])
@@ -157,7 +156,7 @@ class ActionTempTest(test_base.TestBase):
       ]
 
     self.ScratchFile('WORKSPACE')
-    self.ScratchFile('foo/' + toolname, toolsrc, executable=True)
+    self.ScratchFile(f'foo/{toolname}', toolsrc, executable=True)
     self.ScratchFile(
         'foo/foo.bzl',
         [
@@ -179,23 +178,26 @@ class ActionTempTest(test_base.TestBase):
         ],
     )
 
-    self.ScratchFile('foo/BUILD', [
-        'load("//foo:foo.bzl", "foorule")',
-        '',
-        'genrule(',
-        '    name = "genrule",',
-        '    tools = ["%s"],' % toolname,
-        '    srcs = ["input.txt"],',
-        '    outs = ["genrule.txt"],',
-        '    cmd = "$(location %s) $@ $(location input.txt)",' % toolname,
-        ')',
-        '',
-        'foorule(',
-        '    name = "starlark",',
-        '    src = "input.txt",',
-        '    tool = "%s",' % toolname,
-        ')',
-    ])
+    self.ScratchFile(
+        'foo/BUILD',
+        [
+            'load("//foo:foo.bzl", "foorule")',
+            '',
+            'genrule(',
+            '    name = "genrule",',
+            f'    tools = ["{toolname}"],',
+            '    srcs = ["input.txt"],',
+            '    outs = ["genrule.txt"],',
+            f'    cmd = "$(location {toolname}) $@ $(location input.txt)",',
+            ')',
+            '',
+            'foorule(',
+            '    name = "starlark",',
+            '    src = "input.txt",',
+            f'    tool = "{toolname}",',
+            ')',
+        ],
+    )
 
   def _SpawnStrategies(self):
     """Returns the list of supported --spawn_strategy values."""
@@ -206,9 +208,8 @@ class ActionTempTest(test_base.TestBase):
     self.AssertExitCode(exit_code, 2, stderr)
     pattern = re.compile(r'^ERROR:.*no strategy.*Valid values are: \[(.*)\]$')
     for line in stderr:
-      m = pattern.match(line)
-      if m:
-        return set(e.strip() for e in m.groups()[0].split(','))
+      if m := pattern.match(line):
+        return {e.strip() for e in m.groups()[0].split(',')}
     return []
 
   def _BuildRules(self,
@@ -226,7 +227,7 @@ class ActionTempTest(test_base.TestBase):
         [
             'build',
             '--verbose_failures',
-            '--spawn_strategy=%s' % strategy,
+            f'--spawn_strategy={strategy}',
             '//foo:genrule',
             '//foo:starlark',
         ],
@@ -247,8 +248,8 @@ class ActionTempTest(test_base.TestBase):
     if test_base.TestBase.IsWindows():
       # 5 lines = input_file_line, TMP:y, TEMP:y, TMP=<path>, TEMP=<path>
       if len(lines) != 5:
-        self.fail('lines=%s' % lines)
-      self.assertEqual(lines[0:3], [input_file_line, 'TMP:y', 'TEMP:y'])
+        self.fail(f'lines={lines}')
+      self.assertEqual(lines[:3], [input_file_line, 'TMP:y', 'TEMP:y'])
       tmp = lines[3].split('=', 1)[1]
       temp = lines[4].split('=', 1)[1]
       self.assertRegexpMatches(tmp, expected_tmpdir_regex)
@@ -256,8 +257,8 @@ class ActionTempTest(test_base.TestBase):
     else:
       # 3 lines = input_file_line, foo, TMPDIR
       if len(lines) != 3:
-        self.fail('lines=%s' % lines)
-      self.assertEqual(lines[0:2], [input_file_line, 'foo'])
+        self.fail(f'lines={lines}')
+      self.assertEqual(lines[:2], [input_file_line, 'foo'])
       tmpdir = lines[2].split('=', 1)[1]
       self.assertRegexpMatches(tmpdir, expected_tmpdir_regex)
 

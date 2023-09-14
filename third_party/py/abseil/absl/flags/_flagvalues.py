@@ -224,9 +224,7 @@ class FlagValues:
       return True
     # Check whether flag_obj is registered under its short name.
     short_name = flag_obj.short_name
-    if (short_name is not None and flag_dict.get(short_name, None) == flag_obj):
-      return True
-    return False
+    return short_name is not None and flag_dict.get(short_name, None) == flag_obj
 
   def _cleanup_unregistered_flag_from_module_dicts(self, flag_obj):
     """Cleans up unregistered flags from all module -> [flags] dictionaries.
@@ -366,8 +364,7 @@ class FlagValues:
       UnrecognizedFlagError
       IllegalFlagValueError
     """
-    setter = self.__dict__['__set_unknown']
-    if setter:
+    if setter := self.__dict__['__set_unknown']:
       try:
         setter(name, value)
         return value
@@ -477,7 +474,7 @@ class FlagValues:
       return fl[name].value
     else:
       raise _exceptions.UnparsedFlagAccessError(
-          'Trying to access flag --%s before flags were parsed.' % name)
+          f'Trying to access flag --{name} before flags were parsed.')
 
   def __setattr__(self, name, value):
     """Sets the 'value' attribute of the flag --name."""
@@ -531,12 +528,12 @@ class FlagValues:
     for validator in sorted(
         validators, key=lambda validator: validator.insertion_index):
       try:
-        if isinstance(validator, _validators_classes.SingleFlagValidator):
-          if validator.flag_name in bad_flags:
-            continue
-        elif isinstance(validator, _validators_classes.MultiFlagsValidator):
-          if bad_flags & set(validator.flag_names):
-            continue
+        if (isinstance(validator, _validators_classes.SingleFlagValidator)
+            and validator.flag_name in bad_flags
+            or not isinstance(validator, _validators_classes.SingleFlagValidator)
+            and isinstance(validator, _validators_classes.MultiFlagsValidator)
+            and bad_flags & set(validator.flag_names)):
+          continue
         validator.verify(self)
       except _exceptions.ValidationError as e:
         if isinstance(validator, _validators_classes.SingleFlagValidator):
@@ -544,7 +541,7 @@ class FlagValues:
         elif isinstance(validator, _validators_classes.MultiFlagsValidator):
           bad_flags.update(set(validator.flag_names))
         message = validator.print_flags_with_values(self)
-        messages.append('%s: %s' % (message, str(e)))
+        messages.append(f'{message}: {str(e)}')
     if messages:
       raise _exceptions.IllegalFlagValueError('\n'.join(messages))
 
@@ -713,7 +710,7 @@ class FlagValues:
         try:
           return next(args) if value is None else value
         except StopIteration:
-          raise _exceptions.Error('Missing value for flag ' + arg)  # pylint: disable=undefined-loop-variable
+          raise _exceptions.Error(f'Missing value for flag {arg}')
 
       if not arg.startswith('-'):
         # A non-argument: default is break, GNU is skip.
@@ -729,11 +726,7 @@ class FlagValues:
         break
 
       # At this point, arg must start with '-'.
-      if arg.startswith('--'):
-        arg_without_dashes = arg[2:]
-      else:
-        arg_without_dashes = arg[1:]
-
+      arg_without_dashes = arg[2:] if arg.startswith('--') else arg[1:]
       if '=' in arg_without_dashes:
         name, value = arg_without_dashes.split('=', 1)
       else:
@@ -751,21 +744,18 @@ class FlagValues:
       if name == 'undefok':
         value = get_value()
         undefok.update(v.strip() for v in value.split(','))
-        undefok.update('no' + v.strip() for v in value.split(','))
+        undefok.update(f'no{v.strip()}' for v in value.split(','))
         continue
 
       flag = flag_dict.get(name)
       if flag is not None:
-        if flag.boolean and value is None:
-          value = 'true'
-        else:
-          value = get_value()
+        value = 'true' if flag.boolean and value is None else get_value()
       elif name.startswith('no') and len(name) > 2:
         # Boolean flags can take the form of --noflag, with no value.
         noflag = flag_dict.get(name[2:])
         if noflag is not None and noflag.boolean:
           if value is not None:
-            raise ValueError(arg + ' does not take an argument')
+            raise ValueError(f'{arg} does not take an argument')
           flag = noflag
           value = 'false'
 
@@ -856,8 +846,7 @@ class FlagValues:
     Returns:
       str, formatted help message.
     """
-    flags_by_module = self.flags_by_module_dict()
-    if flags_by_module:
+    if flags_by_module := self.flags_by_module_dict():
       modules = sorted(flags_by_module)
       # Print the help for the main module first, if possible.
       main_module = sys.argv[0]
@@ -902,12 +891,11 @@ class FlagValues:
     if not isinstance(module, str):
       module = module.__name__
     output_lines.append('\n%s%s:' % (prefix, module))
-    self._render_flag_list(flags, output_lines, prefix + '  ')
+    self._render_flag_list(flags, output_lines, f'{prefix}  ')
 
   def _render_our_module_flags(self, module, output_lines, prefix=''):
     """Returns a help string for a given module."""
-    flags = self.get_flags_for_module(module)
-    if flags:
+    if flags := self.get_flags_for_module(module):
       self._render_module_flags(module, flags, output_lines, prefix)
 
   def _render_our_module_key_flags(self, module, output_lines, prefix=''):
@@ -919,8 +907,7 @@ class FlagValues:
         will be appended to this list.
       prefix: str, a string that is prepended to each generated help line.
     """
-    key_flags = self.get_key_flags_for_module(module)
-    if key_flags:
+    if key_flags := self.get_key_flags_for_module(module):
       self._render_module_flags(module, key_flags, output_lines, prefix)
 
   def module_help(self, module):
@@ -963,24 +950,22 @@ class FlagValues:
       flagset[flag] = 1
       flaghelp = ''
       if flag.short_name:
-        flaghelp += '-%s,' % flag.short_name
-      if flag.boolean:
-        flaghelp += '--[no]%s:' % flag.name
-      else:
-        flaghelp += '--%s:' % flag.name
+        flaghelp += f'-{flag.short_name},'
+      flaghelp += f'--[no]{flag.name}:' if flag.boolean else f'--{flag.name}:'
       flaghelp += ' '
       if flag.help:
         flaghelp += flag.help
-      flaghelp = _helpers.text_wrap(
-          flaghelp, indent=prefix + '  ', firstline_indent=prefix)
+      flaghelp = _helpers.text_wrap(flaghelp,
+                                    indent=f'{prefix}  ',
+                                    firstline_indent=prefix)
       if flag.default_as_str:
         flaghelp += '\n'
-        flaghelp += _helpers.text_wrap(
-            '(default: %s)' % flag.default_as_str, indent=prefix + '  ')
+        flaghelp += _helpers.text_wrap(f'(default: {flag.default_as_str})',
+                                       indent=f'{prefix}  ')
       if flag.parser.syntactic_help:
         flaghelp += '\n'
-        flaghelp += _helpers.text_wrap(
-            '(%s)' % flag.parser.syntactic_help, indent=prefix + '  ')
+        flaghelp += _helpers.text_wrap(f'({flag.parser.syntactic_help})',
+                                       indent=f'{prefix}  ')
       output_lines.append(flaghelp)
 
   def get_flag_value(self, name, default):  # pylint: disable=invalid-name
@@ -995,10 +980,7 @@ class FlagValues:
     """
 
     value = self.__getattr__(name)
-    if value is not None:  # Can't do if not value, b/c value might be '0' or ""
-      return value
-    else:
-      return default
+    return value if value is not None else default
 
   def _is_flag_file_directive(self, flag_string):
     """Checks whether flag_string contain a --flagfile=<foo> directive."""
@@ -1036,7 +1018,7 @@ class FlagValues:
     elif flagfile_str.startswith('-flagfile='):
       return os.path.expanduser((flagfile_str[(len('-flagfile=')):]).strip())
     else:
-      raise _exceptions.Error('Hit illegal --flagfile type: %s' % flagfile_str)
+      raise _exceptions.Error(f'Hit illegal --flagfile type: {flagfile_str}')
 
   def _get_flag_file_lines(self, filename, parsed_file_stack=None):
     """Returns the useful (!=comments, etc) lines from a file with flags.
@@ -1077,7 +1059,7 @@ class FlagValues:
       file_obj = open(filename, 'r')
     except IOError as e_msg:
       raise _exceptions.CantOpenFlagFileError(
-          'ERROR:: Unable to open flagfile: %s' % e_msg)
+          f'ERROR:: Unable to open flagfile: {e_msg}')
 
     with file_obj:
       line_list = file_obj.readlines()
@@ -1152,7 +1134,7 @@ class FlagValues:
       if self._is_flag_file_directive(current_arg):
         # This handles the case of -(-)flagfile foo.  In this case the
         # next arg really is part of this one.
-        if current_arg == '--flagfile' or current_arg == '-flagfile':
+        if current_arg in ['--flagfile', '-flagfile']:
           if not rest_of_args:
             raise _exceptions.IllegalFlagValueError(
                 '--flagfile with no argument')
@@ -1168,10 +1150,7 @@ class FlagValues:
         if current_arg == '--':
           break
         # Stop parsing after a non-flag, like getopt.
-        if not current_arg.startswith('-'):
-          if not force_gnu and not self.__dict__['__use_gnu_getopt']:
-            break
-        else:
+        if current_arg.startswith('-'):
           if ('=' not in current_arg and rest_of_args and
               not rest_of_args[0].startswith('-')):
             # If this is an occurrence of a legitimate --x y, skip the value
@@ -1183,6 +1162,8 @@ class FlagValues:
               rest_of_args = rest_of_args[1:]
               new_argv.append(current_arg)
 
+        elif not force_gnu and not self.__dict__['__use_gnu_getopt']:
+          break
     if rest_of_args:
       new_argv.extend(rest_of_args)
 
@@ -1258,8 +1239,7 @@ class FlagValues:
 
     # Sort flags by declaring module name and next by flag name.
     flags_by_module = self.flags_by_module_dict()
-    all_module_names = list(flags_by_module.keys())
-    all_module_names.sort()
+    all_module_names = sorted(flags_by_module.keys())
     for module_name in all_module_names:
       flag_list = [(f.name, f) for f in flags_by_module[module_name]]
       flag_list.sort()
@@ -1372,7 +1352,7 @@ class FlagHolder(Generic[_T]):
     val = getattr(self._flagvalues, self._name)
     if self._ensure_non_none_value and val is None:
       raise _exceptions.IllegalFlagValueError(
-          'Unexpected None value for flag %s' % self._name)
+          f'Unexpected None value for flag {self._name}')
     return val
 
   @property
@@ -1390,7 +1370,7 @@ def resolve_flag_ref(flag_ref, flag_values):
   """Helper to validate and resolve a flag reference argument."""
   if isinstance(flag_ref, FlagHolder):
     new_flag_values = flag_ref._flagvalues  # pylint: disable=protected-access
-    if flag_values != FLAGS and flag_values != new_flag_values:
+    if flag_values not in [FLAGS, new_flag_values]:
       raise ValueError(
           'flag_values must not be customized when operating on a FlagHolder')
     return flag_ref.name, new_flag_values

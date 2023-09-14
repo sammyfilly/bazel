@@ -122,9 +122,7 @@ class Flag(object):
     return self is other
 
   def __lt__(self, other):
-    if isinstance(other, Flag):
-      return id(self) < id(other)
-    return NotImplemented
+    return id(self) < id(other) if isinstance(other, Flag) else NotImplemented
 
   def __bool__(self):
     raise TypeError('A Flag instance would always be True. '
@@ -149,10 +147,7 @@ class Flag(object):
     if self.serializer:
       return repr(self.serializer.serialize(value))
     if self.boolean:
-      if value:
-        return repr('true')
-      else:
-        return repr('false')
+      return repr('true') if value else repr('false')
     return repr(str(value))
 
   def parse(self, argument):
@@ -163,8 +158,7 @@ class Flag(object):
     """
     if self.present and not self.allow_overwrite:
       raise _exceptions.IllegalFlagValueError(
-          'flag --%s=%s: already defined as %s' % (
-              self.name, argument, self.value))
+          f'flag --{self.name}={argument}: already defined as {self.value}')
     self.value = self._parse(argument)
     self.present += 1
 
@@ -181,9 +175,8 @@ class Flag(object):
     """
     try:
       return self.parser.parse(argument)
-    except (TypeError, ValueError) as e:  # Recast as IllegalFlagValueError.
-      raise _exceptions.IllegalFlagValueError(
-          'flag --%s=%s: %s' % (self.name, argument, e))
+    except (TypeError, ValueError) as e:# Recast as IllegalFlagValueError.
+      raise _exceptions.IllegalFlagValueError(f'flag --{self.name}={argument}: {e}')
 
   def unparse(self):
     self.value = self.default
@@ -199,23 +192,15 @@ class Flag(object):
     if value is None:
       return ''
     if self.boolean:
-      if value:
-        return '--%s' % self.name
-      else:
-        return '--no%s' % self.name
-    else:
-      if not self.serializer:
-        raise _exceptions.Error(
-            'Serializer not present for flag %s' % self.name)
-      return '--%s=%s' % (self.name, self.serializer.serialize(value))
+      return f'--{self.name}' if value else f'--no{self.name}'
+    if not self.serializer:
+      raise _exceptions.Error(f'Serializer not present for flag {self.name}')
+    return f'--{self.name}={self.serializer.serialize(value)}'
 
   def _set_default(self, value):
     """Changes the default value (and current value too) for this Flag."""
     self.default_unparsed = value
-    if value is None:
-      self.default = None
-    else:
-      self.default = self._parse_from_default(value)
+    self.default = None if value is None else self._parse_from_default(value)
     self.default_as_str = self._get_parsed_value_as_string(self.default)
     if self.using_default_value:
       self.value = self.default
@@ -334,14 +319,13 @@ class EnumFlag(Flag):
     g = _argument_parser.ArgumentSerializer()
     super(EnumFlag, self).__init__(
         p, g, name, default, help, short_name, **args)
-    self.help = '<%s>: %s' % ('|'.join(enum_values), self.help)
+    self.help = f"<{'|'.join(enum_values)}>: {self.help}"
 
   def _extra_xml_dom_elements(self, doc):
-    elements = []
-    for enum_value in self.parser.enum_values:
-      elements.append(_helpers.create_xml_dom_element(
-          doc, 'enum_value', enum_value))
-    return elements
+    return [
+        _helpers.create_xml_dom_element(doc, 'enum_value', enum_value)
+        for enum_value in self.parser.enum_values
+    ]
 
 
 class EnumClassFlag(Flag):
@@ -361,14 +345,13 @@ class EnumClassFlag(Flag):
     g = _argument_parser.EnumClassSerializer(lowercase=not case_sensitive)
     super(EnumClassFlag, self).__init__(
         p, g, name, default, help, short_name, **args)
-    self.help = '<%s>: %s' % ('|'.join(p.member_names), self.help)
+    self.help = f"<{'|'.join(p.member_names)}>: {self.help}"
 
   def _extra_xml_dom_elements(self, doc):
-    elements = []
-    for enum_value in self.parser.enum_class.__members__.keys():
-      elements.append(_helpers.create_xml_dom_element(
-          doc, 'enum_value', enum_value))
-    return elements
+    return [
+        _helpers.create_xml_dom_element(doc, 'enum_value', enum_value)
+        for enum_value in self.parser.enum_class.__members__.keys()
+    ]
 
 
 class MultiFlag(Flag):
@@ -423,8 +406,7 @@ class MultiFlag(Flag):
   def _serialize(self, value):
     """See base class."""
     if not self.serializer:
-      raise _exceptions.Error(
-          'Serializer not present for flag %s' % self.name)
+      raise _exceptions.Error(f'Serializer not present for flag {self.name}')
     if value is None:
       return ''
 
@@ -436,14 +418,14 @@ class MultiFlag(Flag):
 
   def flag_type(self):
     """See base class."""
-    return 'multi ' + self.parser.flag_type()
+    return f'multi {self.parser.flag_type()}'
 
   def _extra_xml_dom_elements(self, doc):
     elements = []
     if hasattr(self.parser, 'enum_values'):
-      for enum_value in self.parser.enum_values:
-        elements.append(_helpers.create_xml_dom_element(
-            doc, 'enum_value', enum_value))
+      elements.extend(
+          _helpers.create_xml_dom_element(doc, 'enum_value', enum_value)
+          for enum_value in self.parser.enum_values)
     return elements
 
 
@@ -473,16 +455,11 @@ class MultiEnumClassFlag(MultiFlag):
         ('|'.join(p.member_names), help_string or '(no help available)'))
 
   def _extra_xml_dom_elements(self, doc):
-    elements = []
-    for enum_value in self.parser.enum_class.__members__.keys():
-      elements.append(_helpers.create_xml_dom_element(
-          doc, 'enum_value', enum_value))
-    return elements
+    return [
+        _helpers.create_xml_dom_element(doc, 'enum_value', enum_value)
+        for enum_value in self.parser.enum_class.__members__.keys()
+    ]
 
   def _serialize_value_for_xml(self, value):
     """See base class."""
-    if value is not None:
-      value_serialized = self.serializer.serialize(value)
-    else:
-      value_serialized = ''
-    return value_serialized
+    return self.serializer.serialize(value) if value is not None else ''

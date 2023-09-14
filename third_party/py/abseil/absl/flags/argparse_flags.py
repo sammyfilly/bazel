@@ -125,8 +125,8 @@ class ArgumentParser(argparse.ArgumentParser):
     prefix_chars = kwargs.get('prefix_chars', '-')
     if prefix_chars != '-':
       raise ValueError(
-          'argparse_flags.ArgumentParser only supports "-" as the prefix '
-          'character, found "{}".'.format(prefix_chars))
+          f'argparse_flags.ArgumentParser only supports "-" as the prefix character, found "{prefix_chars}".'
+      )
 
     # Remove inherited_absl_flags before calling super.
     self._inherited_absl_flags = kwargs.pop('inherited_absl_flags', flags.FLAGS)
@@ -210,10 +210,9 @@ class ArgumentParser(argparse.ArgumentParser):
   def _define_absl_flag(self, flag_instance, suppress):
     """Defines a flag from the flag_instance."""
     flag_name = flag_instance.name
-    short_name = flag_instance.short_name
-    argument_names = ['--' + flag_name]
-    if short_name:
-      argument_names.insert(0, '-' + short_name)
+    argument_names = [f'--{flag_name}']
+    if short_name := flag_instance.short_name:
+      argument_names.insert(0, f'-{short_name}')
     if suppress:
       helptext = argparse.SUPPRESS
     else:
@@ -221,7 +220,7 @@ class ArgumentParser(argparse.ArgumentParser):
       helptext = flag_instance.help.replace('%', '%%')
     if flag_instance.boolean:
       # Only add the `no` form to the long name.
-      argument_names.append('--no' + flag_name)
+      argument_names.append(f'--no{flag_name}')
       self.add_argument(
           *argument_names, action=_BooleanFlagAction, help=helptext,
           metavar=flag_instance.name.upper(),
@@ -314,10 +313,10 @@ class _BooleanFlagAction(argparse.Action):
       option = option_string[1:]
     if option in self._flag_names:
       self._flag_instance.parse('true')
-    else:
-      if not option.startswith('no') or option[2:] not in self._flag_names:
-        raise ValueError('invalid option_string: ' + option_string)
+    elif option.startswith('no') and option[2:] in self._flag_names:
       self._flag_instance.parse('false')
+    else:
+      raise ValueError(f'invalid option_string: {option_string}')
     self._flag_instance.using_default_value = False
 
 
@@ -349,8 +348,7 @@ class _HelpFullAction(argparse.Action):
     # printed here.
     parser.print_help()
 
-    absl_flags = parser._inherited_absl_flags  # pylint: disable=protected-access
-    if absl_flags:
+    if absl_flags := parser._inherited_absl_flags:
       modules = sorted(absl_flags.flags_by_module_dict())
       main_module = sys.argv[0]
       if main_module in modules:
@@ -364,8 +362,8 @@ class _HelpFullAction(argparse.Action):
 def _strip_undefok_args(undefok, args):
   """Returns a new list of args after removing flags in --undefok."""
   if undefok:
-    undefok_names = set(name.strip() for name in undefok.split(','))
-    undefok_names |= set('no' + name for name in undefok_names)
+    undefok_names = {name.strip() for name in undefok.split(',')}
+    undefok_names |= {f'no{name}' for name in undefok_names}
     # Remove undefok flags.
     args = [arg for arg in args if not _is_undefok(arg, undefok_names)]
   return args
@@ -375,14 +373,9 @@ def _is_undefok(arg, undefok_names):
   """Returns whether we can ignore arg based on a set of undefok flag names."""
   if not arg.startswith('-'):
     return False
-  if arg.startswith('--'):
-    arg_without_dash = arg[2:]
-  else:
-    arg_without_dash = arg[1:]
+  arg_without_dash = arg[2:] if arg.startswith('--') else arg[1:]
   if '=' in arg_without_dash:
     name, _ = arg_without_dash.split('=', 1)
   else:
     name = arg_without_dash
-  if name in undefok_names:
-    return True
-  return False
+  return name in undefok_names

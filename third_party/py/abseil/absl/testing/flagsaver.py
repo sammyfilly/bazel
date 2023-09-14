@@ -89,7 +89,7 @@ def flagsaver(*args, **kwargs):
     if not isinstance(holder, flags.FlagHolder):
       raise ValueError('Expected (FlagHolder, value) pair, found %r' % (arg,))
     if holder.name in kwargs:
-      raise ValueError('Cannot set --%s multiple times' % holder.name)
+      raise ValueError(f'Cannot set --{holder.name} multiple times')
     kwargs[holder.name] = value
   return _FlagOverrider(**kwargs)
 

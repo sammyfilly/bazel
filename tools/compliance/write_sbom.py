@@ -62,13 +62,11 @@ def create_sbom(package_info: dict, maven_packages: dict) -> dict:
   }
 
   packages = []
-  relationships = []
-
-  relationships.append({
+  relationships = [{
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relatedSpdxElement": "SPDXRef-Package-main",
-      "relationshipType": "DESCRIBES"
-  })
+      "relationshipType": "DESCRIBES",
+  }]
 
   # This is bazel private shenanigans.
   magic_file_suffix = "//file:file"
@@ -76,7 +74,7 @@ def create_sbom(package_info: dict, maven_packages: dict) -> dict:
   for pkg in package_info["packages"]:
     tmp_id = hashlib.md5()
     tmp_id.update(pkg.encode("utf-8"))
-    spdxid = "SPDXRef-GooglePackage-%s" % tmp_id.hexdigest()
+    spdxid = f"SPDXRef-GooglePackage-{tmp_id.hexdigest()}"
     pi = {
         "name": pkg,
         "downloadLocation": "NOASSERTION",
@@ -153,8 +151,7 @@ def maven_install_to_packages(maven_install: dict) -> dict:
     for repo in repos:
       if repo in repo_to_url:
         print(
-            "WARNING: Duplicate download path for <%s>. Using %s"
-            % (repo, repo_to_url[repo])
+            f"WARNING: Duplicate download path for <{repo}>. Using {repo_to_url[repo]}"
         )
         continue
       repo_to_url[repo] = url
@@ -169,8 +166,8 @@ def maven_install_to_packages(maven_install: dict) -> dict:
       sub_version = version
       repo_name = name
       if arch != "jar":
-        sub_version = version + "-" + arch
-        repo_name = "%s:jar:%s" % (name, arch)
+        sub_version = f"{version}-{arch}"
+        repo_name = f"{name}:jar:{arch}"
 
       url = (
           "{mirror}{repo}/{artifact}/{version}/{artifact}-{version}.jar".format(
@@ -183,7 +180,7 @@ def maven_install_to_packages(maven_install: dict) -> dict:
       tmp = info.copy()
       tmp["maven_name"] = name
       tmp["url"] = url
-      bazel_name = maven_to_bazel(name) + "_" + maven_to_bazel(sub_version)
+      bazel_name = f"{maven_to_bazel(name)}_{maven_to_bazel(sub_version)}"
       ret[bazel_name] = tmp
       if arch == "jar":
         ret[bazel_name] = tmp

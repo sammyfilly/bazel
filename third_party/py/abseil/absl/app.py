@@ -397,11 +397,7 @@ def usage(shorthelp=False, writeto_stdout=False, detailed_error=None,
     exitcode: optional integer, if set, exits with this status code after
         writing help.
   """
-  if writeto_stdout:
-    stdfile = sys.stdout
-  else:
-    stdfile = sys.stderr
-
+  stdfile = sys.stdout if writeto_stdout else sys.stderr
   doc = sys.modules['__main__'].__doc__
   if not doc:
     doc = '\nUSAGE: %s [flags]\n' % sys.argv[0]
@@ -414,10 +410,7 @@ def usage(shorthelp=False, writeto_stdout=False, detailed_error=None,
     except (OverflowError, TypeError, ValueError):
       # Just display the docstring as-is.
       pass
-  if shorthelp:
-    flag_str = FLAGS.main_module_help()
-  else:
-    flag_str = FLAGS.get_help()
+  flag_str = FLAGS.main_module_help() if shorthelp else FLAGS.get_help()
   try:
     stdfile.write(doc)
     if flag_str:
@@ -475,6 +468,7 @@ def install_exception_handler(handler):
   FlagsError or UsageError.
   """
   if not isinstance(handler, ExceptionHandler):
-    raise TypeError('handler of type %s does not inherit from ExceptionHandler'
-                    % type(handler))
+    raise TypeError(
+        f'handler of type {type(handler)} does not inherit from ExceptionHandler'
+    )
   EXCEPTION_HANDLERS.append(handler)

@@ -55,7 +55,7 @@ def _register_bounds_validator_if_needed(parser, name, flag_values):
 
     def checker(value):
       if value is not None and parser.is_outside_bounds(value):
-        message = '%s is not %s' % (value, parser.syntactic_help)
+        message = f'{value} is not {parser.syntactic_help}'
         raise _exceptions.ValidationError(message)
       return True
 
@@ -129,8 +129,7 @@ def DEFINE_flag(  # pylint: disable=invalid-name
     a handle to defined flag.
   """
   if required and flag.default is not None:
-    raise ValueError('Required flag --%s cannot have a non-None default' %
-                     flag.name)
+    raise ValueError(f'Required flag --{flag.name} cannot have a non-None default')
   # Copying the reference to flag_values prevents pychecker warnings.
   fv = flag_values
   fv[flag.name] = flag
@@ -813,10 +812,11 @@ def DEFINE_multi_enum(  # pylint: disable=invalid-name,redefined-builtin
       serializer,
       name,
       default,
-      '<%s>: %s' % ('|'.join(enum_values), help),
+      f"<{'|'.join(enum_values)}>: {help}",
       flag_values,
       required=required,
-      **args)
+      **args,
+  )
 
 
 def DEFINE_multi_enum_class(  # pylint: disable=invalid-name,redefined-builtin
@@ -915,7 +915,7 @@ def DEFINE_alias(  # pylint: disable=invalid-name
     def value(self, value):
       flag.value = value
 
-  help_msg = 'Alias for --%s.' % flag.name
+  help_msg = f'Alias for --{flag.name}.'
   # If alias_name has been used, flags.DuplicatedFlag will be raised.
   return DEFINE_flag(
       _FlagAlias(

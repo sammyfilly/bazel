@@ -43,7 +43,7 @@ def get_executable_path(py_binary_name):
     py_binary_name += '.exe'
     manifest_file = os.path.join(FLAGS.test_srcdir, 'MANIFEST')
     workspace_name = os.environ['TEST_WORKSPACE']
-    manifest_entry = '{}/{}'.format(workspace_name, py_binary_name)
+    manifest_entry = f'{workspace_name}/{py_binary_name}'
     with open(manifest_file, 'r') as manifest_fd:
       for line in manifest_fd:
         tokens = line.strip().split(' ')
@@ -52,8 +52,8 @@ def get_executable_path(py_binary_name):
         if manifest_entry == tokens[0]:
           return tokens[1]
     raise RuntimeError(
-        'Cannot locate executable path for {}, MANIFEST file: {}.'.format(
-            py_binary_name, manifest_file))
+        f'Cannot locate executable path for {py_binary_name}, MANIFEST file: {manifest_file}.'
+    )
   else:
     # NOTE: __file__ may be .py or .pyc, depending on how the module was
     # loaded and executed.
@@ -65,4 +65,4 @@ def get_executable_path(py_binary_name):
       path = os.path.dirname(path)
 
     root_directory = path
-    return os.path.join(root_directory, py_binary_name)
+    return os.root_directory.join(root_directory, py_binary_name)
